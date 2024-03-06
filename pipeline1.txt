@@ -1,0 +1,53 @@
+def startNextJob(){
+    echo "Job Success start next job"
+    echo "Starting KarnatakaRupayRegression"
+    service = "KarnatakaRupayRegression"   
+    echo "${params.branch}"   
+    build job: 'KarnatakaRupayRegression', 
+    parameters: [        
+        [$class: 'StringParameterValue', name: 'branch', value: params.branch ]      
+    ]
+}
+
+pipeline {
+    agent any
+    tools {maven 'maven'}
+    stages {
+        stage('deploying acs2_components'){ 
+            steps('Running accosa2-config-management'){
+                ws('/webserver/jenkins-workspace/Sanity/ExpressPay'){
+                    withEnv(["JAVA_HOME=/webserver/softwares/java/jdk-11.0.17/"]){
+                        sh"rm -rf /webserver/jenkins-workspace/Sanity/ExpressPay/target/surefire-reports/emailable-report.html"
+                        git credentialsId: 'ivsgit',
+                                url: 'https://github.com/wibmo-payment-security/acsqa-ui.git',
+                                branch: "acsqa-ui-${params.branch}-scripts "
+                        sh" chmod 755 -R *"
+                        sh "mvn install -Dhttp.proxyHost=192.168.109.32 -Dhttp.proxyPort=6558 -Dsurefire.suiteXmlFiles=TestSuits/ExpresPay_TestSuite.xml"
+                    }
+                }     
+            }
+        }
+    }
+    post{
+        success {
+            //startNextJob();
+            emailext (
+                from: 'ivs.automation@wibmo.com',           
+                to: '3ds2.0qa@wibmo.com, arun.srinivasan@wibmo.com, madhusudhan.reddy@wibmo.com',
+                mimeType: 'text/html',
+                subject: "build  ${currentBuild.number}-${currentBuild.currentResult}:${env.JOB_NAME} Result",
+                body: '${FILE, path="/webserver/jenkins-workspace/Sanity/ExpressPay/target/surefire-reports/emailable-report.html"}'
+            )            
+        }
+        failure {
+            emailext (
+                from: 'ivs.automation@wibmo.com',            
+                to: '3ds2.0qa@wibmo.com, arun.srinivasan@wibmo.com',
+                mimeType: 'text/html',
+                subject: "build  ${currentBuild.number}-${currentBuild.currentResult}:${env.JOB_NAME} Result",
+                body: '${FILE, path="/webserver/jenkins-workspace/Sanity/ExpressPay/target/surefire-reports/emailable-report.html"}'
+            )
+        }
+    }
+}
+
